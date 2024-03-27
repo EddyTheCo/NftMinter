@@ -438,28 +438,26 @@ void BoxModel::sendAll(QString recAddr)
                     }
                 }
             }
-
         }
         info->deleteLater();
     });
 }
-void BoxModel::sendSelecteds(QString recAddr,  QString retAddr, QDateTime unixTime)
+void BoxModel::sendSelecteds(QString recAddr, QDateTime unixTime)
 {
     auto info=NodeConnection::instance()->rest()->get_api_core_v2_info();
     connect(info,&Node_info::finished,this,[=]( ){
 
         c_array recArray;
-        c_array retArray;
         if(NftBox::set_addr(recAddr,recArray))
         {
             const auto addrUnlock=Unlock_Condition::Address(Address::from_array(recArray));
             const auto unlock=
                 Unlock_Condition::Address(Wallet::instance()->addresses().begin()->second->getAddress());
             pset<const Unlock_Condition> theUnlocks{addrUnlock};
-            if(NftBox::set_addr(retAddr,retArray)&&unixTime.isValid())
+            if(unixTime.isValid())
             {
                 const auto expirUnlock=Unlock_Condition::Expiration(unixTime.toSecsSinceEpoch(),
-                                                                      Address::from_array(retArray));
+                                                                      Wallet::instance()->addresses().begin()->second->getAddress());
                 //Add storage unlock to recieve the extra from adding the expiration?
                 theUnlocks.insert(expirUnlock);
             }
@@ -556,12 +554,6 @@ void BoxModel::sendSelecteds(QString recAddr,  QString retAddr, QDateTime unixTi
                 auto payloadusedids=Wallet::instance()->createTransaction(inputSet,info,theOutputs);
                 auto block=Block(payloadusedids.first);
 
-                const auto transactionid=payloadusedids.first->get_id().toHexString();
-                auto res=NodeConnection::instance()->mqtt()->get_subscription("transactions/"+transactionid +"/included-block");
-                QObject::connect(res,&ResponseMqtt::returned,this,[=](auto var){
-                    res->deleteLater();
-                });
-
                 NodeConnection::instance()->rest()->send_block(block);
 
             }
@@ -574,6 +566,113 @@ void BoxModel::sendSelecteds(QString recAddr,  QString retAddr, QDateTime unixTi
                         boxes[i]->setState(NftBox::Stte::Ready);
                     }
                 }
+            }
+
+        }
+        info->deleteLater();
+    });
+}
+void BoxModel::sendBT(QString amountStr, QString recAddr, QDateTime unixTime)
+{
+
+    auto info=NodeConnection::instance()->rest()->get_api_core_v2_info();
+    connect(info,&Node_info::finished,this,[=]( ){
+
+        c_array recArray;
+        if(NftBox::set_addr(recAddr,recArray))
+        {
+            const auto addrUnlock=Unlock_Condition::Address(Address::from_array(recArray));
+            const auto unlock=
+                Unlock_Condition::Address(Wallet::instance()->addresses().begin()->second->getAddress());
+            pset<const Unlock_Condition> theUnlocks{addrUnlock};
+            auto expirUnlock=Unlock_Condition::Expiration(unixTime.toSecsSinceEpoch(),
+                                                                  Wallet::instance()->addresses().begin()->second->getAddress());
+            if(unixTime.isValid())
+            {
+                //Add storage unlock to recieve the extra from adding the expiration?
+                theUnlocks.insert(expirUnlock);
+            }
+            pvector<const Output> theOutputs;
+
+            const quint64 amount=amountStr.toULongLong();
+
+
+            auto BaOut=Output::Basic(0,{unlock});
+            auto minDeposit=Client::get_deposit(BaOut,info);
+
+            quint64 neededAmount=(amount>=minDeposit)?amount:(minDeposit+amount);
+
+
+            if(amount<minDeposit)
+            {
+                const auto varstoraUnlock=
+                    Unlock_Condition::Storage_Deposit_Return( Wallet::instance()->addresses().begin()->second->getAddress(), minDeposit );
+
+                pset<const Unlock_Condition> varUnlocks{addrUnlock,varstoraUnlock};
+                if(!unixTime.isValid())
+                {
+                    expirUnlock=Unlock_Condition::Expiration(QDateTime::currentDateTime().addDays(1).toSecsSinceEpoch(),
+                                                                          Wallet::instance()->addresses().begin()->second->getAddress());
+
+                    theUnlocks.insert(expirUnlock);
+
+                }
+                varUnlocks.insert(expirUnlock);
+
+                auto VarOut=Output::Basic(0,varUnlocks);
+
+                minDeposit=Client::get_deposit(VarOut,info);
+                const auto storaUnlock=
+                    Unlock_Condition::Storage_Deposit_Return( Wallet::instance()->addresses().begin()->second->getAddress(), minDeposit-amount );
+                theUnlocks.insert(storaUnlock);
+
+            }
+
+            auto SendOut=Output::Basic(0,theUnlocks);
+            const auto sendamount=Client::get_deposit(SendOut,info);
+
+            if(neededAmount<sendamount)neededAmount=sendamount;
+            SendOut->amount_=neededAmount;
+
+            theOutputs.push_back(SendOut);
+
+            InputSet inputSet;
+            StateOutputs stateOutputs1;
+            quint64 consumedAmount=0;
+            consumedAmount+=Wallet::instance()->
+                              consume(inputSet,stateOutputs1,0,{Output::Basic_typ});
+
+            quint64 stateAmount=0;
+            for (auto i = stateOutputs1.cbegin(), end = stateOutputs1.cend(); i != end; ++i)
+            {
+                auto out=i.value().output->clone();
+                auto prevUnlock=out->unlock_conditions_;
+                out->consume();
+                out->unlock_conditions_=prevUnlock;   //Add state transition is if alias
+                const auto cdep=NodeConnection::instance()->rest()->get_deposit(out,info);
+                out->amount_=cdep;
+                stateAmount+=cdep;
+                theOutputs.push_back(out);
+            }
+
+
+            if(consumedAmount>=stateAmount+neededAmount)
+            {
+                if(consumedAmount-stateAmount-neededAmount>minDeposit)
+                {
+                    BaOut->amount_=consumedAmount-stateAmount-neededAmount;
+                    theOutputs.push_back(BaOut);
+                }
+                else
+                {
+                    SendOut->amount_+=consumedAmount-stateAmount-neededAmount;
+                }
+
+                auto payloadusedids=Wallet::instance()->createTransaction(inputSet,info,theOutputs);
+                auto block=Block(payloadusedids.first);
+
+                NodeConnection::instance()->rest()->send_block(block);
+
             }
 
         }

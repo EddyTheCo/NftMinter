@@ -13,13 +13,13 @@ int main(int argc, char *argv[])
     QQuickStyle::setStyle(FORCE_STYLE);
 #endif
 
-	QQmlApplicationEngine engine;
+    QQmlApplicationEngine engine;
     engine.addImageProvider(QLatin1String("qrcode"), new QRImageProvider(1));
     engine.addImageProvider(QLatin1String("wasm"), new WasmImageProvider());
     engine.addImportPath("qrc:/esterVtech.com/imports");
 
-    const QUrl url(u"qrc:/esterVtech.com/imports/Esterv/Iota/NFTMinter/qml/window.qml"_qs);
-	engine.load(url);
+    const QUrl url("qrc:/esterVtech.com/imports/Esterv/Iota/NFTMinter/qml/window.qml");
+    engine.load(url);
 
-	return app.exec();
+    return app.exec();
 }

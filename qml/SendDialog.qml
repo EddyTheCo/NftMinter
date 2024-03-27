@@ -7,6 +7,7 @@ import QtQuick.Controls
 import Esterv.Iota.NFTMinter
 import Esterv.CustomControls.QrDec
 import Esterv.Iota.AddrBundle
+import Esterv.Iota.Wallet
 import Esterv.CustomControls.DateTimePickers
 
 Popup
@@ -15,12 +16,11 @@ Popup
     visible:false
     onClosed:  {
 
-            recAddress.text="";
-            retAddress.text="";
-            timeselector.ocustom = new Date(undefined);
-            datetimepicker.selDate = new Date();
-            datetimepicker.initDate = new Date();
-            timeselector.currentIndex=0;
+        recAddress.text="";
+        timeselector.ocustom = new Date(undefined);
+        datetimepicker.selDate = new Date();
+        datetimepicker.initDate = new Date();
+        timeselector.currentIndex=0;
     }
     Popup
     {
@@ -57,33 +57,91 @@ Popup
 
     }
 
+
     ColumnLayout
     {
         anchors.fill: parent
-        Layout.margins: 5
-        Label
+        TabBar {
+            id:chooseSendAll
+            property bool sendAll:false
+            Layout.fillWidth: true
+            visible:!BoxModel.selecteds
+            TabButton {
+                text: qsTr("Send")
+                onClicked:
+                {
+                    chooseSendAll.sendAll=false;
+                }
+            }
+            TabButton {
+                text: qsTr("Send all")
+                onClicked:
+                {
+                    chooseSendAll.sendAll=true;
+                }
+
+            }
+        }
+        Frame
         {
-            text:qsTr("Recipient:")
+            id:tokenAmount
+            Layout.fillWidth: true
+            visible:!chooseSendAll.sendAll&&!BoxModel.selecteds
+            ColumnLayout
+            {
+                Label
+                {
+                    text:qsTr("Amount:")
+                }
+                RowLayout
+                {
+
+                    TextField
+                    {
+                        id:sendAmount
+
+                        inputMethodHints:Qt.ImhDigitsOnly
+                        inputMask: "00000000000000000"
+                    }
+                    Label
+                    {
+                        text: Wallet.amount.json.largeValue.unit
+                    }
+                }
+            }
+
         }
 
-        QrTextField
+        Frame
         {
-            id:recAddress
             Layout.fillWidth: true
-            AddressChecker
+            ColumnLayout
             {
-                id:recAddrCheck
-                address:recAddress.text
+                anchors.fill:parent
+                Label
+                {
+                    text:qsTr("Recipient:")
+                }
+                QrTextField
+                {
+                    id:recAddress
+                    Layout.fillWidth: true
+                    AddressChecker
+                    {
+                        id:recAddrCheck
+                        address:recAddress.text
+                    }
+                    ToolTip.text: qsTr("Not an address")
+                    ToolTip.visible: (!recAddrCheck.valid)&&(recAddrCheck.address!=="")
+                }
             }
-            ToolTip.text: qsTr("Not an address")
-            ToolTip.visible: (!recAddrCheck.valid)&&(recAddrCheck.address!=="")
         }
         Button
         {
             id:expbutt
             text:qsTr("Expiration "+ ((expFrame.visible)?"-":"+"))
             onClicked: expFrame.visible=!expFrame.visible
-            visible:BoxModel.selecteds
+            visible:BoxModel.selecteds||!chooseSendAll.sendAll
             onVisibleChanged: {
                 if(!expbutt.visible)expFrame.visible=false;
             }
@@ -97,22 +155,6 @@ Popup
             ColumnLayout
             {
                 anchors.fill: parent
-                Label
-                {
-                    text:qsTr("Return address:")
-                }
-                QrTextField
-                {
-                    id: retAddress
-                    Layout.fillWidth: true
-                    AddressChecker
-                    {
-                        id:retAddrCheck
-                        address:retAddress.text
-                    }
-                    ToolTip.text: qsTr("Not an address")
-                    ToolTip.visible: (!retAddrCheck.valid)&&(retAddrCheck.address!=="")
-                }
                 Label
                 {
                     text:qsTr("Expiration Time:")
@@ -172,10 +214,12 @@ Popup
             delay: 2000
             ToolTip.text: qsTr("Hold to Send")
             ToolTip.visible: hovered
-            enabled: recAddrCheck.valid&&((expFrame.visible&&retAddrCheck.valid&&timeselector.currentIndex)||!expFrame.visible)
+            enabled: (!tokenAmount.visible||parseInt(sendAmount.text)>0)&&recAddrCheck.valid&&((expFrame.visible&&timeselector.currentIndex)||!expFrame.visible)
             onActivated:
             {
-                BoxModel.send(recAddress.text, retAddress.text, timeselector.currentValue)
+
+                BoxModel.send((tokenAmount.visible)?sendAmount.text:"0",recAddress.text, timeselector.currentValue);
+
                 control.close();
             }
         }

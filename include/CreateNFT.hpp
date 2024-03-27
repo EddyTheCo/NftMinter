@@ -114,10 +114,19 @@ public:
         emit newBoxesChanged();
     };
     void addBox(NftBox* nbox);
-    Q_INVOKABLE void send(QString recAddr, QString retAddr, QDateTime unixTime)
+    Q_INVOKABLE void send(QString amount,QString recAddr, QDateTime unixTime)
     {
-        if(m_selecteds)sendSelecteds(recAddr, retAddr, unixTime);
-        else sendAll(recAddr);
+        if(m_selecteds)
+        {
+            sendSelecteds(recAddr, unixTime);
+            return;
+        }
+        if(amount!="0")
+        {
+            sendBT(amount,recAddr, unixTime);
+            return;
+        }
+        sendAll(recAddr);
 
     };
 
@@ -149,7 +158,8 @@ signals:
     void selectedsChanged();
 
 private:
-    void sendSelecteds(QString recAddr, QString retAddr, QDateTime unixTime);
+    void sendSelecteds(QString recAddr, QDateTime unixTime);
+    void sendBT(QString amount, QString recAddr, QDateTime unixTime);
     void sendAll(QString recAddr);
     void gotInput(c_array id);
     void lostInput(c_array id);

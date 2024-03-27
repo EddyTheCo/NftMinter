@@ -103,7 +103,7 @@ Rectangle
             }
             Button
             {
-                text:qsTr((BoxModel.selecteds)?"Send":"Send all")
+                text:qsTr((BoxModel.selecteds)?("Send NFT"+((BoxModel.selecteds===1)?"":"s")):"Send")
                 enabled:(NodeConnection.state&&((Object.keys(Wallet.amount.json).length != 0)&&Wallet.amount.json.largeValue.value>0))
                 Layout.fillWidth: true
                 Layout.maximumWidth: 200
